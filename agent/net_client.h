@@ -2,6 +2,7 @@
 #define __MOLTEN_AGENT_CLIENT_H
 
 #include "common.h"
+#include "errno.h"
 
 #define CLIENT_BUF_SIZE    32
 

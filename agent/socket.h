@@ -9,7 +9,6 @@
 
 #include "common.h"
 
-
 /* set fd reuse */
 static int set_addr_reuse(int fd) {
     int reuse = 1;
@@ -55,6 +54,7 @@ int create_tcp_listen_server(char *addr, int port, int backlog, int famlily, cha
     memset(&hints, 0x00, sizeof(struct addrinfo));    
     hints.ai_family = famlily;
     hints.ai_socktype = SOCK_STREAM;
+
     /* man getaddrinfo */
     hints.ai_flags = AI_PASSIVE; 
    

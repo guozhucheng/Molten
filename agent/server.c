@@ -36,6 +36,7 @@ static void sig_stop_server(int sig) {
         msg = "Received SIGNAL to shutdown ... ";
     }
     server.prepare_stop = 1; 
+    server.el->stop = 1;
     AGENT_SLOG(SLOG_DEBUG, "[server]agent server prepare to stop");
 }
 
@@ -124,19 +125,12 @@ int main() {
     //uint64_t  period;
     // simple control info
     // one thread to collect info
-    for(;;) {
 
-        if (server.prepare_stop == 1)  {
-            break;
-        }
-
-        // 100 ms tick   
-        execute_loop(server.el);
-    }
+    // 100 ms tick   
+    execute_loop(server.el);
 
     server_shutdown();
     slog_destroy();
     //timer
-    //net event
     //tick
 }

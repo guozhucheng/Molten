@@ -4,9 +4,11 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <arpa/inet.h>
+#include <sys/time.h>
 
 #include "common.h"
 #include "event.h"
+#include "protocol.h"
 
 #define MAX_CONNECtiON          1024 /* for debug now */
 #define ADDItION_CONNECTION     96   /* keep hole for process used */
@@ -92,26 +94,55 @@ void main_loop_stop(event_loop *el) {
 uint64_t execute_loop(event_loop *el) {
 
     struct timeval intval = {0};
-    
+#define TICK_TIME       1000 * 100
     // 100 ms tick
     intval.tv_sec = 0;
-    intval.tv_usec = 1000 * 100;
+    intval.tv_usec = TICK_TIME;
 
-    // todo add time trigger 
-    int event_num = event_loop_implement(el, &intval);
-    for(int i = 0; i < event_num; i++)  {
-        net_event *ne = &el->regist_events[el->fire_events[i].fd];
-        int mask = ne->mask;
-        int fd = el->fire_events[i].fd;
-        
-        if (ne->mask & EVENT_READ) {
-            AGENT_SLOG(SLOG_DEBUG, "[event loop] read event come %d", fd);
-            ne->r_handler(el, fd, ne->client, mask);
+    // use time wheel
+    // not time heap
+     
+    for(;;) {
+
+        if (el->stop == 1) break;
+
+        struct timeval start_intval, end_intval;
+
+        // time zone ignore;
+        // start intval
+        gettimeofday(&start_intval, NULL);
+
+        // todo add time trigger 
+        int event_num = event_loop_implement(el, &intval);
+        for(int i = 0; i < event_num; i++)  {
+            net_event *ne = &el->regist_events[el->fire_events[i].fd];
+            int mask = ne->mask;
+            int fd = el->fire_events[i].fd;
+            
+            if (ne->mask & EVENT_READ) {
+                AGENT_SLOG(SLOG_DEBUG, "[event loop] read event come %d", fd);
+                ne->r_handler(el, fd, ne->client, mask);
+            }
+
+            if (ne->mask & EVENT_WRITE) {
+                AGENT_SLOG(SLOG_DEBUG, "[event loop] write event come %d", fd);
+                ne->w_handler(el, fd, ne->client, mask);
+            }
         }
 
-        if (ne->mask & EVENT_WRITE) {
-            AGENT_SLOG(SLOG_DEBUG, "[event loop] write event come %d", fd);
-            ne->w_handler(el, fd, ne->client, mask);
+        // end intval
+        gettimeofday(&end_intval, NULL);
+
+        // reset intval
+        // time to usec
+        long start_usec = start_intval.tv_sec * 1000 * 1000 + start_intval.tv_usec;
+        long end_usec = end_intval.tv_sec * 1000 * 1000 + end_intval.tv_usec;
+        
+        /* 1 ms float */
+        if (end_usec - start_usec >= (TICK_TIME - 1000 )) {
+            intval.tv_usec = TICK_TIME;
+        } else {
+            intval.tv_usec = end_usec - start_usec;
         }
     }
 }
@@ -174,12 +205,20 @@ void read_from_client(event_loop *el, int fd, void *client, int mask) {
     append_reader(c->r, read_buf, nread);
     
     /* here it is protocl analyze process */
-     
-    // add event;
-    reader_to_writer(c->r, c->w);
+    int ret = protocol_analyze_req(c);
+    if (ret == PROTOCOL_ERROR_MSG) {
+        AGENT_SLOG(SLOG_DEBUG, "[client] client[%d] read error protocol", fd);
+        release_client(el, c);
+        return;
+    } else if (ret == PROTOCOL_NEED_REPLY){
+        add_net_event(el, c->fd, c, write_to_client, EVENT_WRITE); 
+    }
 
-    /* echo server just echo */
-    add_net_event(el, c->fd, c, write_to_client, EVENT_WRITE); 
+    //// add event;
+    //reader_to_writer(c->r, c->w);
+
+    ///* echo server just echo */
+    //add_net_event(el, c->fd, c, write_to_client, EVENT_WRITE); 
 }
 
 
